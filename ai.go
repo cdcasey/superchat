@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/sashabaranov/go-openai"
+	"github.com/sashabaranov/go-openai/jsonschema"
 )
 
 // Evaluation represents the structured response from the evaluator
@@ -57,9 +61,50 @@ func processChat(message string, history []ChatMessage) (string, error) {
 	return "nil", nil
 }
 
-// func evaluateResponse(ctx context.Context, reply, message string, history []ChatMessage) (*Evaluation, error) {
+func evaluateResponse(ctx context.Context, reply, message string, history []ChatMessage) (*Evaluation, error) {
+	schema := &jsonschema.Definition{
+		Type: jsonschema.Object,
+		Properties: map[string]jsonschema.Definition{
+			"is_acceptable": {
+				Type:        jsonschema.Boolean,
+				Description: "Whether or not the response is acceptable",
+			},
+			"feedback": {
+				Type:        jsonschema.String,
+				Description: "Feedback on the response quality",
+			},
+		},
+		Required: []string{"is_acceptable", "feedback"},
+	}
 
-// }
+	messages := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleSystem, Content: evaluatorPrompt},
+		{Role: openai.ChatMessageRoleUser, Content: buildEvaluatorUserPrompt(reply, message, history)},
+	}
+
+	resp, err := geminiClient.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model:    "gemini-2.0-flash-exp",
+		Messages: messages,
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeJSONSchema,
+			JSONSchema: &openai.ChatCompletionResponseFormatJSONSchema{
+				Name:   "evaluation",
+				Schema: schema,
+				Strict: true,
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var evaluation Evaluation
+	if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &evaluation); err != nil {
+		return nil, fmt.Errorf("Failed to parse evaluation: %w", err)
+	}
+
+	return &evaluation, nil
+}
 
 // func rerunWithFeedback(ctx context.Context, reply, message string, history []ChatMessage, feedback string) (string, error) {
 
