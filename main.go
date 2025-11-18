@@ -27,7 +27,7 @@ func main() {
 		log.Println("Error loading .env file")
 	}
 
-	openaiClient = openai.NewClient(os.Getenv("OPENAPI_API_KEY"))
+	openaiClient = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 
 	geminiConfig := openai.DefaultConfig(os.Getenv("GOOGLE_API_KEY"))
 	geminiConfig.BaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
