@@ -64,14 +64,10 @@ func main() {
 		log.Fatalf("Failed to set keybindings: %v", err)
 	}
 
-	// addMessageToChat("system", fmt.Sprintf("Welcome! Chat with %s. Press Ctrl+C to quit.", name))
+	addMessageToChat("system", fmt.Sprintf("Welcome! Chat with %s. Press Ctrl+C to quit.", name))
 
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 		log.Fatalf("Main loop error: %v", err)
 	}
 
-	fmt.Println(summary)
-
-	fmt.Println(linkedinText)
-	fmt.Printf("Hithere\n%v", geminiConfig.String())
 }
