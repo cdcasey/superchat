@@ -33,12 +33,12 @@ func main() {
 	geminiConfig.BaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 	geminiClient = openai.NewClientWithConfig(geminiConfig)
 
-	linkedinText, err := readPDF("./Profile.pdf")
+	linkedinText, err := readPDF("./me/Profile.pdf")
 	if err != nil {
 		log.Fatalf("Error reading PDF: %v", err)
 	}
 
-	summaryBytes, err := os.ReadFile("./coverletter.txt")
+	summaryBytes, err := os.ReadFile("./me/coverletter.txt")
 	if err != nil {
 		log.Fatalf("Error reading cover letter: %v", err)
 	}
