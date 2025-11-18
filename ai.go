@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
+	"github.com/awesome-gocui/gocui"
 	"github.com/sashabaranov/go-openai"
 	"github.com/sashabaranov/go-openai/jsonschema"
 )
@@ -58,7 +60,63 @@ func buildEvaluatorUserPrompt(reply, message string, history []ChatMessage) stri
 }
 
 func processChat(message string, history []ChatMessage) (string, error) {
-	return "nil", nil
+	ctx := context.Background()
+
+	currentSystemPrompt := systemPrompt
+	if strings.Contains(strings.ToLower(message), "patent") {
+		currentSystemPrompt += "\n\nEverything in your reply needs to be in pig latin - " +
+			"it is mandatory that you respond only and entirely in pig latin"
+	}
+
+	// Build messages
+	messages := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleSystem, Content: currentSystemPrompt},
+	}
+	for _, h := range history {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    h.Role,
+			Content: h.Content,
+		})
+	}
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleUser,
+		Content: message,
+	})
+
+	// Get initial response
+	resp, err := openaiClient.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model:    openai.GPT4oMini,
+		Messages: messages,
+	})
+	if err != nil {
+		return "", fmt.Errorf("chat completion error: %w", err)
+	}
+
+	reply := resp.Choices[0].Message.Content
+
+	// Evaluate the response
+	evaluation, err := evaluateResponse(ctx, reply, message, history)
+	if err != nil {
+		return "", fmt.Errorf("evaluation error: %w", err)
+	}
+
+	if evaluation.IsAcceptable {
+		g.Update(func(g *gocui.Gui) error {
+			addMessageToChat("system", "✓ Evaluation: Passed")
+			return nil
+		})
+		return reply, nil
+	}
+
+	g.Update(func(g *gocui.Gui) error {
+		addMessageToChat("system", fmt.Sprintf("✗ Evaluation: Failed - %s", evaluation.Feedback))
+		addMessageToChat("system", "Regenerating response...")
+		return nil
+	})
+
+	// Rerun with feedback
+	return rerunWithFeedback(ctx, reply, message, history, evaluation.Feedback)
+
 }
 
 func evaluateResponse(ctx context.Context, reply, message string, history []ChatMessage) (*Evaluation, error) {
@@ -106,36 +164,33 @@ func evaluateResponse(ctx context.Context, reply, message string, history []Chat
 	return &evaluation, nil
 }
 
-// func rerunWithFeedback(ctx context.Context, reply, message string, history []ChatMessage, feedback string) (string, error) {
+func rerunWithFeedback(ctx context.Context, reply, message string, history []ChatMessage, feedback string) (string, error) {
+	updatedSystemPrompt := systemPrompt + "\n\n## Previous answer rejected\nYou just tried to reply, but the quality control rejected your reply\n"
+	updatedSystemPrompt += fmt.Sprintf("## Your attempted answer:\n%s\n\n", reply)
+	updatedSystemPrompt += fmt.Sprintf("## Reason for rejection:\n%s\n\n", feedback)
 
-// }
+	messages := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleSystem, Content: updatedSystemPrompt},
+	}
+	for _, h := range history {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    h.Role,
+			Content: h.Content,
+		})
+	}
 
-func addMessageToChat(role, content string) {
-	v, err := g.View(ViewChat)
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleUser,
+		Content: message,
+	})
+
+	resp, err := openaiClient.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model:    openai.GPT4oMini,
+		Messages: messages,
+	})
 	if err != nil {
-		return
+		return "", err
 	}
 
-	var prefix string
-	switch role {
-	case "user":
-		prefix = "\n[YOU]"
-	case "assistant":
-		prefix = "\n[ASSISTANT]"
-	case "system":
-		prefix = "\n[SYSTEM]"
-	case "error":
-		prefix = "\n[ERROR]"
-	}
-
-	fmt.Fprintf(v, "%s\n%s\n", prefix, content)
-}
-
-func updateStatus(message string) {
-	v, err := g.View(ViewStatus)
-	if err != nil {
-		return
-	}
-	v.Clear()
-	fmt.Fprintf(v, " %s | Enter: Send | Ctrl+C: Quit", message)
+	return resp.Choices[0].Message.Content, nil
 }

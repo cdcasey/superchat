@@ -106,3 +106,33 @@ func sendMessage(g *gocui.Gui, v *gocui.View) error {
 
 	return nil
 }
+
+func addMessageToChat(role, content string) {
+	v, err := g.View(ViewChat)
+	if err != nil {
+		return
+	}
+
+	var prefix string
+	switch role {
+	case "user":
+		prefix = "\n[YOU]"
+	case "assistant":
+		prefix = "\n[ASSISTANT]"
+	case "system":
+		prefix = "\n[SYSTEM]"
+	case "error":
+		prefix = "\n[ERROR]"
+	}
+
+	fmt.Fprintf(v, "%s\n%s\n", prefix, content)
+}
+
+func updateStatus(message string) {
+	v, err := g.View(ViewStatus)
+	if err != nil {
+		return
+	}
+	v.Clear()
+	fmt.Fprintf(v, " %s | Enter: Send | Ctrl+C: Quit", message)
+}
